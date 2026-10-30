@@ -19,6 +19,7 @@ struct PredictRequest {
     points: Vec<[f32; 2]>,
     labels: Vec<i32>,
     bbox: Option<[f32; 4]>,
+    #[allow(dead_code)]
     multimask_output: bool,
 }
 
