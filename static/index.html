@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>sam-rs: SAM2 Segment Anything Web GUI</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --surface: #1e293b;
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --text: #f8fafc;
+            --text-secondary: #94a3b8;
+            --border: #334155;
+            --accent: #10b981;
+            --danger: #ef4444;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            background-color: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 1rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        h1 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .badge {
+            background-color: rgba(59, 130, 246, 0.2);
+            color: var(--primary);
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 9999px;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+
+        .container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 320px;
+            background-color: var(--surface);
+            border-right: 1px solid var(--border);
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            overflow-y: auto;
+        }
+
+        .section-title {
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
+            margin-bottom: 0.75rem;
+        }
+
+        .tool-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .tool-btn {
+            background-color: var(--bg);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 0.75rem 1rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 0.875rem;
+            transition: all 0.2s;
+        }
+
+        .tool-btn:hover {
+            border-color: var(--primary);
+            background-color: rgba(59, 130, 246, 0.05);
+        }
+
+        .tool-btn.active {
+            border-color: var(--primary);
+            background-color: var(--primary);
+            color: white;
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            background-size: 20px 20px;
+            background-image: radial-gradient(circle, var(--border) 1px, transparent 1px);
+            position: relative;
+        }
+
+        .canvas-wrapper {
+            position: relative;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            border-radius: 0.5rem;
+            overflow: hidden;
+            background-color: black;
+            max-width: 100%;
+            max-height: 100%;
+        }
+
+        canvas {
+            display: block;
+            cursor: crosshair;
+        }
+
+        .file-upload {
+            border: 2px dashed var(--border);
+            border-radius: 0.5rem;
+            padding: 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+
+        .file-upload:hover {
+            border-color: var(--primary);
+        }
+
+        .status-bar {
+            background-color: var(--surface);
+            border-top: 1px solid var(--border);
+            padding: 0.5rem 1.5rem;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .btn {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .btn:hover {
+            background-color: var(--primary-hover);
+        }
+
+        .btn-danger {
+            background-color: var(--danger);
+        }
+
+        .btn-danger:hover {
+            background-color: #dc2626;
+        }
+
+        .point-marker {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            border: 2px solid white;
+            box-shadow: 0 0 4px rgba(0,0,0,0.5);
+        }
+
+        .point-pos {
+            background-color: var(--accent);
+        }
+
+        .point-neg {
+            background-color: var(--danger);
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>sam-rs <span class="badge">SAM2 Rust Inference</span></h1>
+        <div>
+            <button class="btn" id="reset-btn">Reset All</button>
+            <button class="btn" id="export-btn">Export Mask</button>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="sidebar">
+            <div>
+                <div class="section-title">1. Select Input Image</div>
+                <div class="file-upload" id="drop-zone">
+                    <input type="file" id="file-input" accept="image/*" style="display: none;">
+                    <p style="margin-bottom: 0.5rem;">Click or Drag & Drop Image</p>
+                    <span style="font-size: 0.75rem; color: var(--text-secondary);">Supports JPG, PNG, WebP</span>
+                </div>
+            </div>
+
+            <div>
+                <div class="section-title">2. Prompting Mode</div>
+                <div class="tool-group">
+                    <button class="tool-btn active" id="tool-pos">
+                        <span style="color: var(--accent);">●</span> Add Positive Point (Subject)
+                    </button>
+                    <button class="tool-btn" id="tool-neg">
+                        <span style="color: var(--danger);">●</span> Add Negative Point (Background)
+                    </button>
+                    <button class="tool-btn" id="tool-box">
+                        <span>▢</span> Draw Bounding Box
+                    </button>
+                </div>
+            </div>
+
+            <div>
+                <div class="section-title">3. Model Controls</div>
+                <div class="tool-group">
+                    <button class="btn" id="segment-btn">Auto-Segment (SAM2)</button>
+                    <button class="btn btn-danger" id="clear-prompts-btn">Clear Points</button>
+                </div>
+            </div>
+
+            <div style="margin-top: auto;">
+                <div class="section-title">Architecture Info</div>
+                <p style="font-size: 0.75rem; color: var(--text-secondary); line-height: 1.4;">
+                    SAM2 (Segment Anything Model 2) image segmentation powered by pure Rust backend porting Meta's SAM2 architecture (Hiera backbone + SAM Prompt Encoder & Decoder).
+                </p>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="canvas-wrapper" id="canvas-container">
+                <canvas id="image-canvas"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="status-bar">
+        <span id="status-text">Ready. Please upload an image to begin.</span>
+        <span id="coords-text">X: 0, Y: 0</span>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('image-canvas');
+        const ctx = canvas.getContext('2d');
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const statusText = document.getElementById('status-text');
+        const coordsText = document.getElementById('coords-text');
+        const canvasContainer = document.getElementById('canvas-container');
+
+        let currentImage = null;
+        let activeTool = 'pos'; // 'pos', 'neg', 'box'
+        let points = []; // [{x, y, label: 1 (pos) | 0 (neg)}]
+        let box = null; // {x1, y1, x2, y2}
+        let isDrawingBox = false;
+        let currentMask = null;
+
+        // Tool selection
+        document.getElementById('tool-pos').onclick = () => setTool('pos');
+        document.getElementById('tool-neg').onclick = () => setTool('neg');
+        document.getElementById('tool-box').onclick = () => setTool('box');
+
+        function setTool(tool) {
+            activeTool = tool;
+            document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`tool-${tool}`).classList.add('active');
+        }
+
+        // File upload
+        dropZone.onclick = () => fileInput.click();
+        fileInput.onchange = (e) => {
+            if (e.target.files.length) handleFile(e.target.files[0]);
+        };
+
+        dropZone.ondragover = (e) => { e.preventDefault(); dropZone.style.borderColor = 'var(--primary)'; };
+        dropZone.ondragleave = () => { dropZone.style.borderColor = 'var(--border)'; };
+        dropZone.ondrop = (e) => {
+            e.preventDefault();
+            dropZone.style.borderColor = 'var(--border)';
+            if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+        };
+
+        function handleFile(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    currentImage = img;
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    points = [];
+                    box = null;
+                    currentMask = null;
+                    render();
+                    statusText.innerText = `Loaded image: ${img.width}x${img.height}. Click on subject to segment.`;
+
+                    // Upload image to backend
+                    uploadImageToBackend(e.target.result);
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        async function uploadImageToBackend(base64Data) {
+            statusText.innerText = 'Encoding image with SAM2 backbone...';
+            try {
+                const res = await fetch('/api/set_image', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image_data: base64Data })
+                });
+                const data = await res.json();
+                if (data.status === 'ok') {
+                    statusText.innerText = 'SAM2 Image embeddings computed! Ready for interactive prompts.';
+                } else {
+                    statusText.innerText = 'Error processing image embedding: ' + data.message;
+                }
+            } catch (err) {
+                statusText.innerText = 'Server connection error: ' + err.message;
+            }
+        }
+
+        // Canvas interactions
+        canvas.onmousemove = (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const x = Math.round((e.clientX - rect.left) * scaleX);
+            const y = Math.round((e.clientY - rect.top) * scaleY);
+            coordsText.innerText = `X: ${x}, Y: ${y}`;
+
+            if (isDrawingBox && box) {
+                box.x2 = x;
+                box.y2 = y;
+                render();
+            }
+        };
+
+        canvas.onmousedown = (e) => {
+            if (!currentImage) return;
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const x = Math.round((e.clientX - rect.left) * scaleX);
+            const y = Math.round((e.clientY - rect.top) * scaleY);
+
+            if (activeTool === 'pos' || activeTool === 'neg') {
+                const label = activeTool === 'pos' ? 1 : 0;
+                points.push({ x, y, label });
+                render();
+                autoSegment();
+            } else if (activeTool === 'box') {
+                isDrawingBox = true;
+                box = { x1: x, y1: y, x2: x, y2: y };
+            }
+        };
+
+        canvas.onmouseup = () => {
+            if (isDrawingBox) {
+                isDrawingBox = false;
+                autoSegment();
+            }
+        };
+
+        async function autoSegment() {
+            if (!currentImage) return;
+            statusText.innerText = 'Running SAM2 segmentation pipeline...';
+
+            try {
+                const res = await fetch('/api/predict', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        points: points.map(p => [p.x, p.y]),
+                        labels: points.map(p => p.label),
+                        bbox: box ? [box.x1, box.y1, box.x2, box.y2] : null,
+                        multimask_output: true
+                    })
+                });
+
+                const data = await res.json();
+                if (data.status === 'ok') {
+                    currentMask = data.mask_overlay_data;
+                    render();
+                    statusText.innerText = `Segmentation complete! Score: ${data.iou_score.toFixed(2)}`;
+                } else {
+                    statusText.innerText = 'Segmentation failed: ' + data.message;
+                }
+            } catch (err) {
+                statusText.innerText = 'Error running inference: ' + err.message;
+            }
+        }
+
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (currentImage) {
+                ctx.drawImage(currentImage, 0, 0);
+            }
+
+            // Draw mask overlay
+            if (currentMask) {
+                const maskImg = new Image();
+                maskImg.onload = () => {
+                    ctx.globalAlpha = 0.5;
+                    ctx.drawImage(maskImg, 0, 0, canvas.width, canvas.height);
+                    ctx.globalAlpha = 1.0;
+                };
+                maskImg.src = currentMask;
+            }
+
+            // Draw points
+            points.forEach(p => {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 6, 0, 2 * Math.PI);
+                ctx.fillStyle = p.label === 1 ? '#10b981' : '#ef4444';
+                ctx.fill();
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = '#ffffff';
+                ctx.stroke();
+            });
+
+            // Draw box
+            if (box) {
+                ctx.strokeStyle = '#3b82f6';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([6, 6]);
+                ctx.strokeRect(box.x1, box.y1, box.x2 - box.x1, box.y2 - box.y1);
+                ctx.setLineDash([]);
+            }
+        }
+
+        document.getElementById('clear-prompts-btn').onclick = () => {
+            points = [];
+            box = null;
+            currentMask = null;
+            render();
+            statusText.innerText = 'Prompts cleared.';
+        };
+
+        document.getElementById('reset-btn').onclick = () => {
+            currentImage = null;
+            points = [];
+            box = null;
+            currentMask = null;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            statusText.innerText = 'Reset complete. Upload a new image.';
+        };
+    </script>
+</body>
+</html>
